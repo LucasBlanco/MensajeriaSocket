@@ -12,65 +12,112 @@ app.use(bodyParser.json());
 // Add headers
 
 
-var server = app.listen(4050, function(){
-    console.log('listening to request on port 4050')
+var server = app.listen(9125, function(){
+    console.log('listening to request on port 9125')
 });
 
-var clientsToEmit = null
-app.post('/actualizarClientes', function (req, res, next) {
-    console.log('Post', req.body)
-    res.send(`You sent:to Express`)
-    updateClients(req.body)
-});
 //Statis files
 
 
 var io = socket(server);
 
-var clients = []
+var clientes = []
 
-var getClientByCustomId =  customId => clients.find(elem => elem.customId == customId)
-var getClientByClientId = clientId => clients.find(elem => elem.clientId == clientId)
-var deleteClient = function(clientId, getClient){
-    var index = clients.indexOf(getClient(clientId))
-    if (index > -1) {
-        clients.splice(index, 1);
-    }
-}
+var getClienteBySocketId =  socketId => clientes.find(elem => elem.socketId == socketId)
+var getClienteByUser = user => clientes.find(elem => elem.user == user)
 
-var updateClients = function(clientesANotificar){
-    clientesANotificar.forEach(clienteANotificar => {
+
+var updateClientes = function(accion, data, userNoANotificar){
+    clientes.forEach(clienteANotificar => {
         console.log('updating client', clienteANotificar)
-        var client = getClientByCustomId(clienteANotificar)
-        if(client != undefined){
-            console.log('found client', client)
-            io.sockets.connected[client.clientId].emit('actualizarSolicitudes', {});
+        if(clienteANotificar.user != userNoANotificar){
+            io.sockets.connected[clienteANotificar.socketId].emit(accion, data);
         }
     });
 }
 
+var tomarVenta =  function({user: user, idVenta: idVenta}) {
+    var cliente = getClienteByUser(user)
+    if(cliente != undefined){
+        cliente.ventaTomada = idVenta
+        updateClientes('eliminar', idVenta, user)
+    }
+}
+
+var liberarVenta = function ({ user: user, idVenta: idVenta }) {
+    var cliente = getClienteByUser(user)
+    if (cliente != undefined && cliente.ventaTomada == idVenta) {
+        cliente.ventaTomada = null
+        updateClientes('agregar', idVenta, user)
+    }
+    
+}
+
+var eliminarVenta = function ({ user: user, idVenta: idVenta }) {
+    var cliente = getClienteByUser(user)
+    if (cliente != undefined) {
+        cliente.ventaTomada = null
+        updateClientes('eliminar', idVenta, user)
+    }
+}
+
+var getVentasTomadas = function(){
+    return clientes.map(cliente =>{
+        if(cliente.ventaTomada != null){ 
+            return cliente.ventaTomada
+        }
+    })
+}
 io.on('connection', function(socket){
     console.log('made socket connection', socket.id)
 
-    socket.on('storeClientInfo', function (data) {
+    socket.on('crearUsuario', function (user) {
         console.log('socket: ',socket.id)
-        var clientInfo = new Object();
-        clientInfo.customId = data.customId;
-        clientInfo.clientId = socket.id;
-        clients.push(clientInfo);
+        var nuevoCliente = new Object();
+        nuevoCliente.user = user;
+        nuevoCliente.socketId = socket.id;
+        nuevoCliente.ventaTomada = null
+        clientes.push(nuevoCliente);
+    });
 
+    socket.on('getVentasTomadas', function (data){
+        socket.emit('filtrar', getVentasTomadas());
+    })
+
+    socket.on('tomar', function (data) {
+        console.log('Socket ID: ', socket.id)
+        console.log('User: ', data.user)
+        console.log('Toma venta: ', data.idVenta)
+        tomarVenta(data)
+         
+    });
+
+    socket.on('liberar', function (data) {
+        console.log('Socket ID: ', socket.id)
+        console.log('User: ', data.user)
+        console.log('Libera venta: ', data.idVenta)
+        liberarVenta(data)
+        
+    });
+
+    socket.on('eliminar', function (data) {
+        console.log('Socket ID: ', socket.id)
+        console.log('User: ', data.user)
+        console.log('Elimina venta: ', data.idVenta)
+        eliminarVenta(data)
+        
     });
 
     socket.on('disconnect', function () {
-        deleteClient(socket.id, getClientByClientId)
-        console.log('client disconnected', socket.id)
+        var cliente = getClienteBySocketId(socket.id)
+        var index = clientes.indexOf(cliente)
+        if (index > -1) {
+            clientes.splice(index, 1);
+            console.log('client disconnected', cliente.user)
+        }
+
     });
 
-    socket.on('deleteClient', function (customId) {
-        deleteClient(socket.id, getClientByCustomId)
-        console.log('client deleted', socket.id)
-        console.log(clients)
-    });
 
 })
 
