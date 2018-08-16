@@ -36,15 +36,17 @@ var updateClientes = function(accion, data, userNoANotificar){
     });
 }
 
-var tomarVenta =  function({user: user, idVenta: idVenta}) {
+var tomarVenta =  function({user: user, idVenta: idVenta, pantalla: pantalla}) {
     var cliente = getClienteByUser(user)
     if(cliente != undefined){
         cliente.ventaTomada = idVenta
-        updateClientes('eliminar', idVenta, user)
+        if(idVenta != undefined){
+            updateClientes('eliminar', idVenta, user)
+        }
     }
 }
 
-var liberarVenta = function ({ user: user, idVenta: idVenta }) {
+var liberarVenta = function ({ user: user, idVenta: idVenta , pantalla: pantalla}) {
     var cliente = getClienteByUser(user)
     if (cliente != undefined && cliente.ventaTomada == idVenta) {
         cliente.ventaTomada = null
@@ -53,7 +55,7 @@ var liberarVenta = function ({ user: user, idVenta: idVenta }) {
     
 }
 
-var eliminarVenta = function ({ user: user, idVenta: idVenta }) {
+var eliminarVenta = function ({ user: user, idVenta: idVenta , pantalla: pantalla}) {
     var cliente = getClienteByUser(user)
     if (cliente != undefined) {
         cliente.ventaTomada = null
@@ -75,6 +77,7 @@ io.on('connection', function(socket){
         console.log('socket: ',socket.id)
         var nuevoCliente = new Object();
         nuevoCliente.user = user;
+        nuevoCliente.pantalla = user.pantalla;
         nuevoCliente.socketId = socket.id;
         nuevoCliente.ventaTomada = null
         clientes.push(nuevoCliente);
@@ -88,8 +91,11 @@ io.on('connection', function(socket){
         console.log('Socket ID: ', socket.id)
         console.log('User: ', data.user)
         console.log('Toma venta: ', data.idVenta)
-        tomarVenta(data)
-         
+        if (clientes.some(client => client.ventaTomada == data.idVenta && client.pantalla == data.pantalla)) {
+            socket.emit('ventaTomada', 'ventaTomada');
+        }else{
+            tomarVenta(data)
+        }
     });
 
     socket.on('liberar', function (data) {
